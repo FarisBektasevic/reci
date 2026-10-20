@@ -1,22 +1,56 @@
 # Reci
 
-Diktat na srpskom za Windows. Držiš **desni Ctrl**, pričaš, pustiš — i tekst se pojavi tamo gde ti je kursor. Radi u svakom programu (Claude Code, browser, Word, Slack…), kao Windowsov Win+H, samo što Win+H ne zna srpski.
+**Diktat na srpskom za Windows.** Držiš desni Ctrl, pričaš, pustiš — tekst se pojavi tamo gde ti je kursor. Radi u svakom programu: browser, Word, Slack, Claude, terminal…
 
-Napravljen zato što Windows glasovno kucanje nema srpski, a laptop (i3, 8 GB, bez GPU) ne može da vrti Whisper lokalno. Zato prepoznavanje ide preko interneta, besplatno.
+Windowsovo glasovno kucanje (Win+H) nema srpski. Reci ga ima — i to kao prvi jezik, ne kao jedan od sto. Besplatno, bez naloga ako hoćeš, bez jakog računara (sve se prepoznaje na serveru).
+
+> *Serbian dictation for Windows. Hold right Ctrl, speak, release — text is pasted at the cursor. Free; uses Groq Whisper (or Google as fallback) with a grammar pass tuned for Serbian (Latin script, ekavian). Serbian-first — docs below are in Serbian.*
+
+---
+
+## Instalacija (2 minuta)
+
+1. Skini **`Reci.exe`** sa [Releases](../../releases/latest) stranice.
+2. Prebaci ga gde hoćeš (npr. `C:\Programi\Reci\`) i pokreni dvoklikom.
+3. Pri prvom pokretanju Reci pita dve stvari:
+   - **Groq API ključ** — besplatan, bez kartice: [console.groq.com](https://console.groq.com) → *API Keys* → *Create*. Nalepi ga. Daje bolje prepoznavanje, interpunkciju i lektora.
+     Ako ostaviš prazno, radi preko Google-a: slabije, bez interpunkcije, ali bez ikakvog naloga.
+   - **Da li da se pali sa Windowsom** — preporuka *Da*.
+4. Na dnu ekrana se pojavi „Reci — držite desni Ctrl dok pričate”. To je to.
+
+Windows može da pita „Da li ste sigurni da želite da pokrenete ovaj program?” jer `.exe` nije digitalno potpisan — *More info → Run anyway*. Ko ne veruje `.exe`-u, može da pokrene iz koda (dole).
+
+**Gašenje:** nema prozor ni ikonu — Reci radi tiho u pozadini. Ugasi ga iz Task Manager-a (`Reci.exe`) ili `ugasi.bat` ako radiš iz koda.
+**Autostart kasnije uključi/isključi:** `Win+R` → `shell:startup` → dodaj/obriši prečicu `Reci.lnk`.
 
 ## Kako se koristi
 
 1. Klikni gde treba tekst.
-2. **Drži desni Ctrl** → kratak visok ton → na dnu ekrana traka „● Slušam…”.
-3. Pričaj (posle tona — mikrofon se otvara tek na pritisak).
-4. **Pusti desni Ctrl** → srednji ton → traka „Prepoznajem” → tekst se nalepi za 1–2 s.
+2. **Drži desni Ctrl** → kratak ton → traka „● Slušam…” na dnu ekrana.
+3. Pričaj. *(Posle tona — mikrofon se otvara tek na pritisak, ne ranije.)*
+4. **Pusti desni Ctrl** → drugi ton → „Prepoznajem” → tekst se nalepi za 1–2 s.
 
-Sitnice:
-- Desni Ctrl + neki taster (npr. desni Ctrl+C) je obična prečica — snimanje se tiho otkaže.
-- Pritisak kraći od 0,6 s se ignoriše (slučajan dodir).
-- Snimak se sam prekida posle 3 minuta.
+Dobro je znati:
+- Desni Ctrl + bilo koji taster (npr. desni Ctrl+C) je obična prečica — snimanje se tiho otkaže.
+- Dodir kraći od 0,6 s se ignoriše.
+- Snimak se sam zaustavi posle 3 minuta (oko 400 reči).
 - Tekst ostaje i u clipboardu — ako se ne nalepi, Ctrl+V.
-- Nizak dug ton + crvena traka = greška (nema interneta, ništa nije prepoznato).
+- Crvena traka + dug nizak ton = greška (nema interneta, ništa prepoznato).
+- Ako pričaš engleski, dobijaš **srpski prevod** — Whisperu je zadat srpski pa ne pogađa jezik. Namerno: tako je srpski najtačniji.
+
+## Podešavanje pod svoju ruku
+
+Dva tekstualna fajla, menjaju se bez restarta. Mogu da stoje pored `Reci.exe` **ili** u `%LOCALAPPDATA%\reci\` (primenjuju se oba):
+
+| Fajl | Čemu služi | Primer |
+|---|---|---|
+| `pojmovi.txt` | Imena, brendovi, programi, stručni izrazi — jedan po redu. Whisper ih dobija kao kontekst pa ih ređe kvari. | `Porudžbinator`, `n8n`, `WooCommerce` |
+| `recnik.txt` | Reči koje prepoznavanje *uvek isto* pogreši. `pogrešno = ispravno`, cele reči. | `skuntaš = skontaš` |
+
+Rečnik **nije** način da se popravi opšta tačnost — ne možeš da pokriješ običan govor spiskom. Služi samo za imena i žargon. Na tačnost stvarno utiču mikrofon i model (vidi dole).
+
+Ključ: `%LOCALAPPDATA%\reci\.env` (red `GROQ_API_KEY=gsk_...`). Može i `.env` pored programa ili env promenljiva.
+Log: `%LOCALAPPDATA%\reci\reci.log` — svaka poruka: trajanje, motor, šta je lektor promenio, konačan tekst.
 
 ## Kako radi
 
@@ -24,9 +58,9 @@ Sitnice:
 desni Ctrl ↓  ──►  mikrofon (16 kHz, mono)  ──►  desni Ctrl ↑
                                                       │
                                    ┌──────────────────┴──────────────────┐
-                                   │ 1. Whisper large-v3 (Groq)           │  prepoznavanje govora, lang=sr
+                                   │ 1. Whisper large-v3 (Groq)           │  prepoznavanje, lang=sr + pojmovi.txt
                                    │    ↳ pad / limit → Google Web Speech │  rezerva, bez interpunkcije
-                                   │ 2. recnik.txt                        │  lični parovi „pogrešno = ispravno"
+                                   │ 2. recnik.txt                        │  „pogrešno = ispravno"
                                    │ 3. lektor — qwen3.8-27b (Groq)       │  samo padeži/slaganje/interpunkcija
                                    │ 4. ćirilica → latinica               │  Whisper ponekad vrati ćirilicu
                                    └──────────────────┬──────────────────┘
@@ -34,80 +68,79 @@ desni Ctrl ↓  ──►  mikrofon (16 kHz, mono)  ──►  desni Ctrl ↑
                                        clipboard  ──►  Ctrl+V u aktivni prozor
 ```
 
-### Delovi
-
-| Deo | Šta radi | Gde u kodu |
+| Deo | Šta radi | U kodu |
 |---|---|---|
-| Prečica | `keyboard.hook` prati desni Ctrl. Reaguje na prvi `down` (auto-repeat ignoriše), snima do `up`. Drugi taster tokom držanja = otkaz. | `Reci.on_key` |
-| Snimanje | `sounddevice.InputStream`, otvara se **tek na pritisak** (privatnost — mikrofon nije stalno otvoren), zatvara na puštanje. | `Reci.start / stop` |
-| Whisper | Groq `whisper-large-v3`, `language=sr`, uz `prompt` sa kontekstom (latinica, ekavica, naši pojmovi, žargon). | `transcribe_groq`, `WHISPER_PROMPT` |
-| Google rezerva | `SpeechRecognition` → Google Web Speech `sr-RS`. Prima kratke snimke, pa se duži seku na najtišem mestu u prozoru 35–50 s. | `transcribe_google`, `split_on_silence` |
-| Rečnik | `recnik.txt`, red `pogrešno = ispravno`, cele reči, bez razlike velikih/malih slova. Čita se pri svakom pozivu — izmene važe odmah. | `apply_recnik` |
-| Lektor | Groq chat `qwen/qwen3.8-27b`, `temperature=0`. Strog prompt: samo padeži imenica/prideva, spojene/rastavljene reči, interpunkcija. **Ne sme** da menja lice/broj/vreme glagola, smisao, žargon, „je li”. Ako promeni dužinu van 0,6–1,5×, ignoriše se. Pri grešci → original. | `lektor_groq`, `LEKTOR_PROMPT` |
-| Traka | `tkinter` prozor bez okvira, `WS_EX_NOACTIVATE` da ne krade fokus (inače bi Ctrl+V otišao u traku). Thread-safe kroz queue. | `Indicator` |
-| Jedna instanca | Windows mutex `Local\Reci` — drugi start se odmah ugasi. | `already_running` |
-| Log | `%LOCALAPPDATA%\reci\reci.log` — svaka poruka: trajanje, motor, ispravke, konačan tekst. | `main` |
+| Prečica | `keyboard.hook` prati desni Ctrl. Prvi `down` pali (auto-repeat se ignoriše), `up` gasi. Drugi taster tokom držanja = otkaz. | `Reci.on_key` |
+| Snimanje | `sounddevice.InputStream`, otvara se **tek na pritisak** (mikrofon nije stalno otvoren), zatvara na puštanje. | `Reci.start / stop` |
+| Whisper | Groq `whisper-large-v3`, `language=sr`, `prompt` = latinica/ekavica/žargon + `pojmovi.txt`. | `transcribe_groq`, `whisper_prompt` |
+| Google rezerva | `SpeechRecognition` → Google Web Speech `sr-RS`. Dugi snimci se seku na najtišem mestu (35–50 s). | `transcribe_google`, `split_on_silence` |
+| Rečnik | `recnik.txt`, cele reči, bez razlike velikih/malih. | `apply_recnik` |
+| Lektor | Groq chat `qwen/qwen3.8-27b`, `temperature=0`. Strog: samo padeži imenica/prideva, spojene/rastavljene reči, interpunkcija. **Ne sme** da menja lice/broj/vreme glagola, smisao, žargon, „je li”. Ako promeni dužinu van 0,6–1,5× → ignoriše se. Greška → original. | `lektor_groq`, `LEKTOR_PROMPT` |
+| Traka | `tkinter` bez okvira, `WS_EX_NOACTIVATE` da ne krade fokus (inače bi Ctrl+V otišao u traku). | `Indicator` |
+| Prvo pokretanje | Nema ključa ni `.env`-a → dijalog za ključ + pitanje za autostart → upis u `%LOCALAPPDATA%\reci`. | `first_run_setup`, `set_autostart` |
+| Jedna instanca | Mutex `Local\Reci` — drugi start se odmah ugasi. | `already_running` |
 
-### Zašto ovako
+### Zašto baš tako
 
-- **Mikrofon nije stalno otvoren.** Varijanta sa stalno otvorenim mikrofonom i 1 s „pre-roll” bafera bi uhvatila i prve reči pre pritiska, ali je odbačena zbog privatnosti. Zato ton — pričaj posle njega.
-- **`keyboard.add_hotkey` se ne koristi.** Na `press` okida više puta (auto-repeat → start pa odmah stop), a `trigger_on_release` ne okida ako se modifikator pusti pre glavnog tastera. Zato ručni hook sa `held` flagom.
-- **Lektor je namerno plašljiv.** Prva verzija je „usklađivala” lica glagola i menjala smisao („da ispravno govori” → „govoriš”). Sad je pravilo: u sumnji ostavi.
-- **Rečnik nije rešenje za tačnost** — ne može da pokrije običan govor. Služi samo za imena koja se stalno ponavljaju (Groq, Porudžbinator). Pravi uticaj na tačnost imaju model i mikrofon.
+- **Mikrofon nije stalno otvoren.** Varijanta sa stalnim mikrofonom i 1 s „pre-roll” bafera bi hvatala i reči izgovorene pre pritiska — odbačena zbog privatnosti. Zato ton: pričaj posle njega.
+- **`keyboard.add_hotkey` se ne koristi.** Na `press` okida više puta (auto-repeat → start pa odmah stop), a `trigger_on_release` ne okida ako se modifikator pusti pre glavnog tastera. Ručni hook sa `held` flagom.
+- **Lektor je namerno plašljiv.** Prva verzija je „usklađivala” lica glagola i menjala smisao („da ispravno govori” → „govoriš”). Pravilo: u sumnji ostavi.
+- **Prisilan srpski, ne auto-detekcija.** Auto-detekcija srpski često proglasi za hrvatski/bosanski pa stiže „tjedan”. Cena: engleski se prevede.
 
-## Instalacija
+## Pokretanje iz koda
 
-Potrebni: Windows 10/11, Python 3.11 (`C:\Python311`), mikrofon, internet.
+Windows 10/11, Python 3.11+, mikrofon, internet.
 
 ```bat
-pip install --user -r requirements.txt
-copy .env.example .env     &rem upiši GROQ_API_KEY (besplatno na console.groq.com)
-start.bat
+git clone https://github.com/FarisBektasevic/reci.git
+cd reci
+pip install -r requirements.txt
+start.bat          &rem pokreće u pozadini kroz pythonw; prvi put pita za ključ
 ```
 
-Ključ se traži redom: env promenljiva `GROQ_API_KEY` → `reci/.env` → `../assistant/.env`. Bez ključa radi preko Google-a.
+`ugasi.bat` gasi. Posle izmene koda: `ugasi.bat` pa `start.bat`.
+`build.bat` pravi `dist\Reci.exe` (treba `pip install pyinstaller`).
 
-**Autostart sa Windowsom:** prečica u `shell:startup` ka `C:\Python311\pythonw.exe "…\reci\reci.py"`. (Na ovom računaru već postoji: `Diktat (srpski).lnk`.)
+## Limiti (Groq, besplatan nalog)
 
-**Gašenje:** `ugasi.bat`. **Restart posle izmene koda:** `ugasi.bat` pa `start.bat`.
-
-## Limiti (Groq besplatan nalog)
-
-| | Whisper | Lektor (qwen) |
+| | Whisper | Lektor |
 |---|---|---|
 | Zahteva/min | 20 | 30 |
 | Zahteva/dan | 2.000 | ~14.400 |
-| Zvuk | 2 h / sat, 8 h / dan | — |
+| Zvuk | 2 h/sat, 8 h/dan; fajl ≤ 25 MB (~13 min) | — |
 
-Realna upotreba (~20–50 poruka/sat) ne dolazi ni blizu. Ako Whisper padne na limit, ta poruka ide preko Google-a. Limiti su po organizaciji, ne po ključu.
+Normalna upotreba (20–50 poruka na sat) ne dolazi ni blizu. Ako Whisper udari u limit, ta poruka ide preko Google-a.
 
 ## Tačnost — šta znamo
 
-- Whisper large-v3 je najbolji **besplatan** model za srpski; greška oko 2–3 % reči (jedna reč u 40). Nijedan besplatan sistem nije bez greške.
-- Lektor sređuje padeže („sa oba sajtova” → „sa oba sajta”, „u sat vremene” → „u sat vremena”), ne i pogrešno prepoznate reči.
-- Što dalje pomaže, po redu uticaja:
-  1. **Mikrofon** — slušalice sa mikrofonom umesto Realtek niza u laptopu.
-  2. **Bolji model** — ElevenLabs Scribe / Google Chirp su po nezavisnim merenjima bolji za slovenske jezike (Scribe ~0,4 €/sat govora, ima mali besplatan paket). Pre plaćanja: A/B test na 5–6 snimljenih poruka, brojke a ne utisak.
-  3. Rečnik — samo za imena.
+- Whisper large-v3 je najbolji **besplatan** model za srpski; greši oko 2–3 % reči (jedna u 40). Nijedan besplatan sistem nije bez greške.
+- Lektor sređuje padeže („sa oba sajtova” → „sa oba sajta”), ne i pogrešno prepoznate reči.
+- Šta pomaže, po redu uticaja: **1.** slušalice sa mikrofonom umesto onog u laptopu; **2.** bolji model (ElevenLabs Scribe / Google Chirp su po nezavisnim merenjima bolji za slovenske jezike, ali se plaćaju, ~0,4 €/sat govora); **3.** `pojmovi.txt` za imena.
 
-## Rešavanje problema
+## Problemi
 
-| Simptom | Uzrok / fix |
+| Simptom | Fix |
 |---|---|
-| Ništa se ne dešava na desni Ctrl | Reci ne radi — `start.bat`. Proveri `reci.log`. |
-| Traka se pojavi, tekst se ne nalepi | Aktivni prozor ne prima Ctrl+V — tekst je u clipboardu, nalepi ručno. |
-| „Prepoznajem (Google)” umesto Groq | Groq limit/pad/loš ključ — vidi `reci.log`, red „Groq nije uspeo”. |
-| Prve reči fale | Pričaj posle tona; mikrofonu treba ~100 ms da se otvori. |
-| Ne čuje se ton | `winsound.Beep` na nekim laptopovima ne izlazi na zvučnike. Pokušaj sa `winsound.PlaySound` i WAV-om u memoriji je **pokvario prepoznavanje** (još neistraženo zašto) — vraćeno. Otvoreno. |
-| Lektor promenio smisao | Pošalji red iz loga („Ispravka: … → …”) — zateže se `LEKTOR_PROMPT`. |
+| Ništa na desni Ctrl | Reci ne radi — pokreni ga. Pogledaj `reci.log`. |
+| Traka se pojavi, tekst se ne nalepi | Taj prozor ne prima Ctrl+V — tekst je u clipboardu, nalepi ručno. |
+| „Prepoznajem (Google)” umesto Groq | Limit, pad ili loš ključ — `reci.log`, red „Groq nije uspeo”. |
+| Fale prve reči | Pričaj posle tona; mikrofonu treba ~100 ms. |
+| Ne čuje se ton | `winsound.Beep` na nekim laptopovima ne izlazi na zvučnike. Pokušaj sa `PlaySound` + WAV je **pokvario prepoznavanje** (nejasno zašto) — vraćeno. Otvoreno. |
+| Lektor promenio smisao | Otvori issue sa redom iz loga („Ispravka: … → …”). |
+| Antivirus se buni na `Reci.exe` | PyInstaller `.exe` bez potpisa ponekad okine false positive. Pokreni iz koda. |
 
 ## Istorija
 
-- **21.10.2026** — v1: Ctrl+Alt+Space toggle, crni prozor, Google. Problemi s prečicom (auto-repeat, release). → v2: voki-toki desni Ctrl, pozadina (pythonw), traka, autostart, mutex. → Groq Whisper + Google rezerva. → Ton pri otvaranju mikrofona (umesto stalno otvorenog). → Lektor (llama-3.3 više ne postoji na Groq-u → qwen3.8-27b; gpt-oss-120b odbačen: ijekavica, sporiji). → Rečnik. → Preseljeno iz `assistant/tools/diktat` u ovaj repo kao **Reci**.
+- **21.10.2026** — v1: Ctrl+Alt+Space, crni prozor, Google. → v2: voki-toki desni Ctrl, pozadina, traka, autostart, mutex. → Groq Whisper + Google rezerva. → Ton pri otvaranju mikrofona. → Lektor (qwen3.8-27b; llama-3.3 više nije na Groq-u, gpt-oss-120b odbačen: ijekavica, sporiji). → Rečnik, pojmovi. → `Reci.exe`, prvo pokretanje sa dijalogom, javni repo.
 
 ## Ideje
 
-- Prečica koja otvara Claude prozor i stavlja kursor u polje za poruku.
-- A/B test Whisper vs Scribe na pravim snimcima.
-- Ton koji se stvarno čuje (bez kvarenja prepoznavanja).
-- Opcija da dugi diktat ide direktno kao fajl, ne kroz clipboard.
+- Ikonica u tray-u (status, gašenje, otvaranje loga) umesto Task Manager-a.
+- Druga prečica za engleski (bez prevođenja).
+- A/B Whisper vs Scribe na pravim snimcima.
+- Ton koji se stvarno čuje.
+- Potpisan `.exe`.
+
+## Licenca
+
+MIT — radi šta hoćeš, bez garancije.

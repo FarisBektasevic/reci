@@ -6,10 +6,11 @@ na dnu ekrana stoji mala traka koja ne krade fokus.
 Tok:  desni Ctrl ↓ → mikrofon → desni Ctrl ↑ → Whisper (Groq) → rečnik → lektor (Groq) → ćirilica→latinica → Ctrl+V
 
 Prepoznavanje ide preko interneta (računar se ne opterećuje):
-  - Groq Whisper large-v3 + lektor (qwen) — ako postoji GROQ_API_KEY (reci/.env, pa assistant/.env, pa env)
+  - Groq Whisper large-v3 + lektor (qwen) — ako postoji GROQ_API_KEY (env, .env pored programa, %LOCALAPPDATA%\\reci\\.env)
   - Google Web Speech (besplatno, bez naloga) — rezerva ako Groq-a nema ili zakaže
 
-Pokretanje: start.bat (ili sam krene sa Windowsom). Gašenje: ugasi.bat. Log: %LOCALAPPDATA%\\reci\\reci.log
+Pri prvom pokretanju pita za Groq ključ (može i bez) i da li da se pali sa Windowsom.
+Pokretanje: Reci.exe ili start.bat. Gašenje: ugasi.bat. Log: %LOCALAPPDATA%\\reci\\reci.log
 Detalji: README.md
 """
 import ctypes
@@ -38,10 +39,13 @@ MAX_SECONDS = 180          # automatski stop posle 3 minuta
 GOOGLE_CHUNK_MAX_S = 50    # Google prima kratke snimke — duže se seče na tišini
 GOOGLE_CHUNK_MIN_S = 35
 
-HERE = Path(__file__).resolve().parent
-ENV_FILES = [HERE / ".env", HERE.parent / "assistant" / ".env"]
-RECNIK_FILE = HERE / "recnik.txt"
-LOG_FILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "reci" / "reci.log"
+FROZEN = getattr(sys, "frozen", False)                      # True kad radi kao Reci.exe (PyInstaller)
+HERE = Path(sys.executable if FROZEN else __file__).resolve().parent
+DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "reci"
+ENV_FILES = [HERE / ".env", DATA_DIR / ".env"]
+RECNIK_FILES = [HERE / "recnik.txt", DATA_DIR / "recnik.txt"]      # oba se primenjuju ako postoje
+POJMOVI_FILES = [HERE / "pojmovi.txt", DATA_DIR / "pojmovi.txt"]   # lični pojmovi/žargon za Whisper
+LOG_FILE = DATA_DIR / "reci.log"
 log = logging.getLogger("reci")
 
 CYR_TO_LAT = {
@@ -69,6 +73,57 @@ def load_groq_key() -> str | None:
                 if val:
                     return val
     return None
+
+
+def read_lines(files: list[Path]) -> list[str]:
+    """Neprazni redovi bez # komentara iz svih postojećih fajlova."""
+    out = []
+    for f in files:
+        if f.exists():
+            out += [l.strip() for l in f.read_text(encoding="utf-8").splitlines()
+                    if l.strip() and not l.strip().startswith("#")]
+    return out
+
+
+# --- prvo pokretanje -------------------------------------------------------------
+
+def startup_shortcut() -> Path:
+    return Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs/Startup/Reci.lnk"
+
+
+def set_autostart(on: bool):
+    import subprocess
+    lnk = startup_shortcut()
+    if not on:
+        lnk.unlink(missing_ok=True)
+        return
+    if FROZEN:
+        target, args = str(sys.executable), ""
+    else:
+        target = str(Path(sys.executable).with_name("pythonw.exe"))
+        args = f'"{Path(__file__).resolve()}"'
+    ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');"
+          f"$s.TargetPath='{target}';$s.Arguments='{args}';$s.WorkingDirectory='{HERE}';"
+          f"$s.Description='Reci - diktat na srpskom (drzi desni Ctrl)';$s.Save()")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
+
+
+def first_run_setup(root: tk.Tk):
+    """Ako nema ključa ni .env-a: pita za Groq ključ (može prazno) i za autostart. Jednom."""
+    if load_groq_key() or any(f.exists() for f in ENV_FILES):
+        return
+    from tkinter import messagebox, simpledialog
+    key = simpledialog.askstring(
+        "Reci — podešavanje",
+        "Groq API ključ (besplatno na console.groq.com → API Keys).\n"
+        "Daje bolje prepoznavanje srpskog, interpunkciju i lektora.\n\n"
+        "Ostavite prazno za rad preko Google-a (slabije, bez interpunkcije).",
+        parent=root, show="*") or ""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / ".env").write_text(f"GROQ_API_KEY={key.strip()}\n", encoding="utf-8")
+    if messagebox.askyesno("Reci — podešavanje",
+                           "Da li da se Reci pokreće sam kad se uključi računar?", parent=root):
+        set_autostart(True)
 
 
 def to_wav(samples: np.ndarray) -> bytes:
@@ -111,12 +166,17 @@ def transcribe_google(samples: np.ndarray) -> str:
 
 # --- Groq: Whisper + lektor --------------------------------------------------
 
-WHISPER_PROMPT = (
-    "Diktat na srpskom jeziku, latinica, ekavica, opušten govorni stil. Razgovor o online prodavnici muške odeće. "
-    "Pojmovi: Taman, Taman Shop, TamanHub, Porudžbinator, Butik Lučna, WooCommerce, n8n, Claude, Groq, "
-    "Whisper, Supabase, GitHub, Instagram, SKU, API, webhook, Sors, Snorlax, D Express, Pošta. "
+WHISPER_PROMPT_BASE = (
+    "Diktat na srpskom jeziku, latinica, ekavica, opušten govorni stil. "
     "Žargon: skontati, skontaš, provaliti, fol, okej, kul, zezati, sredi, šta ima."
 )
+
+
+def whisper_prompt() -> str:
+    """Osnovni kontekst + lični pojmovi iz pojmovi.txt (imena, brendovi, stručni izrazi) — čita se pri svakom pozivu."""
+    pojmovi = ", ".join(read_lines(POJMOVI_FILES))
+    return WHISPER_PROMPT_BASE + (f" Pojmovi: {pojmovi}." if pojmovi else "")
+
 
 LEKTOR_MODEL = "qwen/qwen3.8-27b"   # brz (~0.3s), drži ekavicu; llama-3.3 više nije na Groq-u
 LEKTOR_PROMPT = (
@@ -126,7 +186,7 @@ LEKTOR_PROMPT = (
     "NE menjaj lice, broj ni vreme glagola (ko šta radi — 'govori', 'skontaš', 'pogreši' ostaju kako jesu). "
     "NE menjaj smisao, NE dodaj i NE izbacuj rečenice, NE prepričavaj, NE menjaj stil ni redosled misli. "
     "Ako nisi siguran da je nešto greška, OSTAVI kako jeste — bolje je propustiti grešku nego promeniti smisao. "
-    "NE prevodi strane nazive (Taman, Porudžbinator, WooCommerce, n8n, Claude, Groq, SKU ostaju). "
+    "NE prevodi i NE menjaj strane nazive, imena brendova, programa i skraćenice (ostaju kako su izgovoreni). "
     "Govor je opušten i žargonske reči (skontati, provaliti, fol, okej, zezati) su NAMERNE — ostavi ih. "
     "Ne menjaj 'je li' u 'da li'. "
     "Ako je tekst već ispravan, vrati ga nepromenjenog. Odgovori isključivo ispravljenim tekstom, bez objašnjenja."
@@ -140,7 +200,7 @@ def transcribe_groq(samples: np.ndarray, key: str) -> str:
         headers={"Authorization": f"Bearer {key}"},
         files={"file": ("reci.wav", to_wav(samples), "audio/wav")},
         data={"model": "whisper-large-v3", "language": "sr", "response_format": "json",
-              "prompt": WHISPER_PROMPT},
+              "prompt": whisper_prompt()},
         timeout=60,
     )
     r.raise_for_status()
@@ -176,11 +236,8 @@ def lektor_groq(text: str, key: str) -> str:
 def load_recnik() -> list[tuple[re.Pattern, str]]:
     """Čita recnik.txt pri svakom pozivu — izmene važe odmah, bez restarta."""
     pairs = []
-    if not RECNIK_FILE.exists():
-        return pairs
-    for line in RECNIK_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for line in read_lines(RECNIK_FILES):
+        if "=" not in line:
             continue
         wrong, right = (s.strip() for s in line.split("=", 1))
         if wrong and right:
@@ -388,6 +445,7 @@ def main():
         log.info("Reci već radi — izlazim.")
         return
     ui = Indicator()
+    first_run_setup(ui.root)
     r = Reci(ui)
     keyboard.hook(r.on_key)
     engine = "Groq Whisper large-v3 + lektor" if r.groq_key else "Google (besplatno)"

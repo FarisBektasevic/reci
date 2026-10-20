@@ -1,0 +1,12 @@
+# Lični pojmovi koje Whisper treba da zna — imena, brendovi, programi, stručni izrazi.
+# Jedan pojam po redu. Daju se Whisperu kao kontekst pa ih ređe kvari (npr. „Groq" umesto „grok").
+# Ovaj fajl je primer; svoj spisak možete držati i u %LOCALAPPDATA%\reci\pojmovi.txt (primenjuju se oba).
+
+Claude
+Groq
+Whisper
+GitHub
+WooCommerce
+n8n
+API
+webhook

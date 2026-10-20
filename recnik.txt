@@ -1,10 +1,10 @@
-# Lični rečnik ispravki za diktat — primenjuje se PRE lektora.
+# Lični rečnik ispravki — primenjuje se PRE lektora.
 # Format: pogrešno = ispravno   (jedan par po redu, cele reči, ne razlikuje velika/mala slova)
-# Dopunjava se kroz razgovor sa Claude-om kad se primeti greška.
+# Za reči koje prepoznavanje UVEK isto pogreši. Nije rešenje za opštu tačnost — samo za imena i žargon.
+# Svoj spisak možete držati i u %LOCALAPPDATA%\reci\recnik.txt (primenjuju se oba).
 
 skuntaš = skontaš
 skuntam = skontam
 skuntao = skontao
 groka = Groq-a
 grok = Groq
-porudžbinatora = Porudžbinatora
