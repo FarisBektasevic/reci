@@ -1,0 +1,10 @@
+# Lični rečnik ispravki za diktat — primenjuje se PRE lektora.
+# Format: pogrešno = ispravno   (jedan par po redu, cele reči, ne razlikuje velika/mala slova)
+# Dopunjava se kroz razgovor sa Claude-om kad se primeti greška.
+
+skuntaš = skontaš
+skuntam = skontam
+skuntao = skontao
+groka = Groq-a
+grok = Groq
+porudžbinatora = Porudžbinatora
