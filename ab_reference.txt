@@ -1,0 +1,20 @@
+1. Juče smo imali dvadeset pet porudžbina na srpskom sajtu, a na bosanskom nijednu, što je čudno jer je prošle nedelje bilo po pet dnevno.
+2. Proveri da li košulja K2001 u tamnoplavoj boji ima veličinu XL na stanju, i ako nema, prebaci glavnu sliku na belu.
+3. Lektor ne sme da menja lice glagola, nego samo padeže imenica i prideva, inače menja smisao rečenice.
+4. Pošalji kupcu mejl da će paket biti isporučen u četvrtak, dvadeset trećeg oktobra, preko D Expressa, i da plaća pouzećem.
+5. Đorđe iz Čačka je naručio džemper, čizme i šorc, ali je napisao pogrešan broj telefona, pa ga nismo dobili.
+6. Instaliraj Reci iz terminala, pa kad se pojavi pilula, drži desni Ctrl i pričaj, a tekst se nalepi gde ti je kursor.
+7. Groq Whisper je besplatan, ElevenLabs Scribe košta oko dvadeset dva centa po satu, a Google Chirp traži karticu iako je prvih šezdeset minuta besplatno.
+8. Nemam pojma zašto se to dešava, iskreno, probaj da ga restartuješ, pa ako opet zeza, javi mi.
+9. Promet u butiku je u septembru bio tri miliona osamsto hiljada dinara, od čega je šezdeset posto išlo preko kartice.
+10. Skontao sam da je lakše da diktiram na srpskom nego da kucam na engleskom, jer brže izrazim šta hoću.
+11. U Porudžbinatoru se identifikatori narudžbina preklapaju između sajtova, pa uvek moraš da gledaš par sajt i broj.
+12. Snorlax pravilo sa većim prioritetom ne pobeđuje uvek, jer lista izuzetaka preskače pravilo, pa prođe ono slabije.
+13. Treba mi izveštaj za pantalone, farmerke i mokasine po bojama, sa prodajom u poslednjih trideset dana i trenutnim lagerom.
+14. Ako korisnik pusti taster pre nego što se mikrofon otvori, prve reči se izgube, zato čekaj ton pa onda pričaj.
+15. Kad završimo A/B test, obriši snimke iz foldera, vrati autostart na instaliranu verziju i ponovo napravi exe.
+16. Nije mi jasno da li Microsoft uopšte planira da doda srpski u Windows diktiranje, pošto hrvatski i slovenački već imaju.
+17. Ćevapi, džezva, šljivovica, đevrek i čvarci su reči koje svaki program za prepoznavanje srpskog mora da pogodi.
+18. Backup baze radi svake noći u pola četiri preko n8n workflowa, a dump ide na GitHub u folder data slash backups.
+19. Pitao sam ga tri puta da li je poslao robu, a on samo kaže biće, biće, i ništa.
+20. Ukupno je, dakle, sto četrdeset osam hiljada devetsto dvadeset osam dinara, uključujući poštarinu od petsto devedeset po porudžbini.
