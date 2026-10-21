@@ -27,12 +27,13 @@ import wave
 import winsound
 from pathlib import Path
 
-import keyboard
 import numpy as np
 import pyperclip
 import sounddevice as sd
 
 HOLD_KEY = "right ctrl"    # drži dok pričaš (voki-toki)
+VK_HOLD = 0xA3             # VK_RCONTROL
+POLL_S = 0.025             # koliko često se pita Windows „je li desni Ctrl pritisnut?”
 SAMPLE_RATE = 16000
 MIN_SECONDS = 0.6          # kraće = slučajan pritisak, tiho se odbacuje
 MAX_SECONDS = 180          # automatski stop posle 3 minuta
@@ -83,6 +84,47 @@ def read_lines(files: list[Path]) -> list[str]:
             out += [l.strip() for l in f.read_text(encoding="utf-8").splitlines()
                     if l.strip() and not l.strip().startswith("#")]
     return out
+
+
+# --- tastatura bez hook-a ---------------------------------------------------------
+# Namerno NEMA globalnog keyboard hook-a (keylogger mehanizam). Program samo pita Windows
+# „je li desni Ctrl trenutno pritisnut?" (GetAsyncKeyState za JEDAN taster) i ne dobija
+# nikakvu informaciju o ostalim tasterima — osim dok se desni Ctrl drži, kad proveri da li
+# je pritisnut još neki taster (desni Ctrl + C = obična prečica, otkaz diktata).
+
+_user32 = ctypes.windll.user32
+_CTRL_VKS = {0x11, 0xA2, 0xA3}      # VK_CONTROL, VK_LCONTROL, VK_RCONTROL
+
+
+def key_down(vk: int) -> bool:
+    return bool(_user32.GetAsyncKeyState(vk) & 0x8000)
+
+
+def other_key_down() -> bool:
+    return any(key_down(vk) for vk in range(0x08, 0x100) if vk not in _CTRL_VKS)
+
+
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", ctypes.c_ushort), ("wScan", ctypes.c_ushort), ("dwFlags", ctypes.c_ulong),
+                ("time", ctypes.c_ulong), ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong))]
+
+
+class _INPUT(ctypes.Structure):
+    class _U(ctypes.Union):
+        _fields_ = [("ki", _KEYBDINPUT), ("pad", ctypes.c_ubyte * 32)]
+    _anonymous_ = ("u",)
+    _fields_ = [("type", ctypes.c_ulong), ("u", _U)]
+
+
+def send_ctrl_v():
+    """Ctrl+V kroz SendInput (levi Ctrl, da ne dira stanje desnog koji korisnik možda još drži)."""
+    KEYUP, VK_LCONTROL, VK_V = 0x0002, 0xA2, 0x56
+    seq = [(VK_LCONTROL, 0), (VK_V, 0), (VK_V, KEYUP), (VK_LCONTROL, KEYUP)]
+    arr = (_INPUT * len(seq))()
+    for i, (vk, flags) in enumerate(seq):
+        arr[i].type = 1  # INPUT_KEYBOARD
+        arr[i].ki = _KEYBDINPUT(vk, 0, flags, 0, None)
+    _user32.SendInput(len(seq), arr, ctypes.sizeof(_INPUT))
 
 
 # --- prvo pokretanje -------------------------------------------------------------
@@ -394,17 +436,22 @@ class Reci:
         self.lock = threading.Lock()
 
     # --- tastatura -------------------------------------------------------
-    def on_key(self, e):
-        if e.name == HOLD_KEY:
-            if e.event_type == "down" and not self.held:
-                self.held = True
+    def watch_key(self):
+        """Petlja (u svom threadu): pita samo za desni Ctrl, bez hook-a na tastaturu."""
+        cancelled = False
+        while True:
+            down = key_down(VK_HOLD)
+            if down and not self.held:
+                self.held, cancelled = True, False
                 self.start()
-            elif e.event_type == "up" and self.held:
+            elif down and self.held and not cancelled and other_key_down():
+                cancelled = True          # desni Ctrl + neki taster = obična prečica, nije diktat
+                self.cancel()
+            elif not down and self.held:
                 self.held = False
-                self.stop()
-        elif e.event_type == "down" and self.held:
-            # desni Ctrl + neki taster = obična prečica (Ctrl+C...), nije diktat
-            self.cancel()
+                if not cancelled:
+                    self.stop()
+            time.sleep(POLL_S)
 
     # --- snimanje ---------------------------------------------------------
     def _callback(self, indata, frames, time_info, status):
@@ -495,7 +542,7 @@ class Reci:
         if text != raw:
             log.info("Ispravka: %s  →  %s", raw, text)
         pyperclip.copy(text)
-        keyboard.send("ctrl+v")
+        send_ctrl_v()
         log.info("OK: %s", text)
         self.ui.hide()
 
@@ -519,7 +566,7 @@ def main():
     ui = Indicator()
     first_run_setup(ui.root)
     r = Reci(ui)
-    keyboard.hook(r.on_key)
+    threading.Thread(target=r.watch_key, daemon=True).start()
     engine = "Groq Whisper large-v3 + lektor" if r.groq_key else "Google (besplatno)"
     log.info("Reci spreman — drži %s | prepoznavanje: %s", HOLD_KEY.upper(), engine)
     ui.show("Reci je spreman", "info", "držite desni Ctrl dok pričate", 2500)
