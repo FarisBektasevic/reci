@@ -14,14 +14,14 @@ PowerShell (Win+X → *Terminal*), jedna linija — bez git-a, bez Python-a:
 irm https://raw.githubusercontent.com/FarisBektasevic/reci/main/install.ps1 | iex
 ```
 
-Skine poslednji `Reci.exe` u `%LOCALAPPDATA%\Programs\Reci`, napravi prečicu u Start meniju i pokrene ga. Ista komanda radi i za ažuriranje. Skripta je [install.ps1](install.ps1) — pročitaj je pre pokretanja ako ti je tako lakše.
+Skine poslednji `Reci.zip` sa Releases, proveri SHA-256, raspakuje u `%LOCALAPPDATA%\Programs\Reci`, napravi prečicu u Start meniju i pokrene. Ista komanda radi i za ažuriranje. Skripta je [install.ps1](install.ps1) — pročitaj je pre pokretanja ako ti je tako lakše.
 
 Deinstalacija: obriši `%LOCALAPPDATA%\Programs\Reci`, `%LOCALAPPDATA%\reci` (ključ, log) i `shell:startup\Reci.lnk`.
 
 ## Instalacija ručno
 
-1. Skini **`Reci.exe`** sa [Releases](../../releases/latest) stranice.
-2. Prebaci ga gde hoćeš (npr. `C:\Programi\Reci\`) i pokreni dvoklikom.
+1. Skini **`Reci.zip`** sa [Releases](../../releases/latest) stranice i raspakuj gde hoćeš (npr. `C:\Programi\Reci\`).
+2. Pokreni `Reci.exe` iz tog foldera dvoklikom. (Pored zipa je `Reci.zip.sha256` — `Get-FileHash Reci.zip` u PowerShellu mora da da isti broj.)
 3. Pri prvom pokretanju Reci pita dve stvari:
    - **Groq API ključ** — besplatan, bez kartice: [console.groq.com](https://console.groq.com) → *API Keys* → *Create*. Nalepi ga. Daje bolje prepoznavanje, interpunkciju i lektora.
      Ako ostaviš prazno, radi preko Google-a: slabije, bez interpunkcije, ali bez ikakvog naloga.
@@ -109,7 +109,7 @@ start.bat          &rem pokreće u pozadini kroz pythonw; prvi put pita za klju�
 ```
 
 `ugasi.bat` gasi. Posle izmene koda: `ugasi.bat` pa `start.bat`.
-`build.bat` pravi `dist\Reci.exe` (treba `pip install pyinstaller`).
+`build.bat` pravi `dist\Reci\` + `dist\Reci.zip` + SHA-256 (treba `pip install pyinstaller`). Namerno folder a ne jedan `.exe`, bez UPX-a, sa ikonicom (`reci.ico`) i metapodacima (`version_info.txt`) — sve to smanjuje lažne alarme antivirusa. `.exe` i dalje nije potpisan: sertifikat se plaća, a program je open source.
 
 ## Limiti (Groq, besplatan nalog)
 
@@ -137,7 +137,7 @@ Normalna upotreba (20–50 poruka na sat) ne dolazi ni blizu. Ako Whisper udari 
 | Fale prve reči | Pričaj posle tona; mikrofonu treba ~100 ms. |
 | Ne čuje se ton | `winsound.Beep` na nekim laptopovima ne izlazi na zvučnike. Pokušaj sa `PlaySound` + WAV je **pokvario prepoznavanje** (nejasno zašto) — vraćeno. Otvoreno. |
 | Lektor promenio smisao | Otvori issue sa redom iz loga („Ispravka: … → …”). |
-| Antivirus se buni na `Reci.exe` | PyInstaller `.exe` bez potpisa ponekad okine false positive. Pokreni iz koda. |
+| Antivirus se buni na `Reci.exe` | Nepotpisan PyInstaller program ponekad okine false positive. Od v1.1 je folder (ne onefile), bez UPX-a, sa metapodacima — ređe se dešava. Ako se desi: prijavi kao false positive ([Microsoft](https://www.microsoft.com/wdsi/filesubmission) za Defender) ili pokreni iz koda. |
 
 ## Istorija
 
