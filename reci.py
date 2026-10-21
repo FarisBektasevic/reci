@@ -284,7 +284,7 @@ def lektor_groq(text: str, key: str) -> str:
 
 AB_DIR = DATA_DIR / "ab"
 AB_LOG = AB_DIR / "ab.jsonl"
-SCRIBE_MODEL = "scribe_v1"
+SCRIBE_MODEL = "scribe_v2"
 
 
 def transcribe_scribe(samples: np.ndarray, key: str) -> str:
