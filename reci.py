@@ -62,18 +62,22 @@ def to_latin(text: str) -> str:
     return "".join(CYR_TO_LAT.get(ch, ch) for ch in text)
 
 
-def load_groq_key() -> str | None:
-    if os.environ.get("GROQ_API_KEY"):
-        return os.environ["GROQ_API_KEY"].strip()
+def env_value(name: str) -> str | None:
+    if os.environ.get(name):
+        return os.environ[name].strip()
     for env in ENV_FILES:
         if not env.exists():
             continue
         for line in env.read_text(encoding="utf-8").splitlines():
-            if line.strip().startswith("GROQ_API_KEY="):
+            if line.strip().startswith(f"{name}="):
                 val = line.split("=", 1)[1].strip().strip('"').strip("'")
                 if val:
                     return val
     return None
+
+
+def load_groq_key() -> str | None:
+    return env_value("GROQ_API_KEY")
 
 
 def read_lines(files: list[Path]) -> list[str]:
@@ -273,6 +277,49 @@ def lektor_groq(text: str, key: str) -> str:
     return fixed
 
 
+# --- A/B test motora (privremeno) ------------------------------------------------
+# Uključuje se sa RECI_AB=1 + ELEVENLABS_API_KEY u .env. Svaki snimak ide paralelno i na
+# ElevenLabs Scribe; korisniku se lepi Whisper kao i inače, a par (whisper, scribe) + WAV
+# se čuvaju u %LOCALAPPDATA%\reci\ab\ za kasnije ocenjivanje (ab_review.py).
+
+AB_DIR = DATA_DIR / "ab"
+AB_LOG = AB_DIR / "ab.jsonl"
+SCRIBE_MODEL = "scribe_v1"
+
+
+def transcribe_scribe(samples: np.ndarray, key: str) -> str:
+    import requests
+    r = requests.post(
+        "https://api.elevenlabs.io/v1/speech-to-text",
+        headers={"xi-api-key": key},
+        files={"file": ("reci.wav", to_wav(samples), "audio/wav")},
+        data={"model_id": SCRIBE_MODEL, "language_code": "srp", "tag_audio_events": "false"},
+        timeout=60,
+    )
+    r.raise_for_status()
+    return r.json().get("text", "")
+
+
+def ab_record(samples: np.ndarray, whisper_raw: str, scribe_key: str):
+    """U svom threadu: pošalje snimak na Scribe, sačuva WAV + oba teksta u ab.jsonl."""
+    import json
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    AB_DIR.mkdir(parents=True, exist_ok=True)
+    wav_path = AB_DIR / f"{ts}.wav"
+    wav_path.write_bytes(to_wav(samples))
+    try:
+        scribe_raw = to_latin(transcribe_scribe(samples, scribe_key)).strip()
+    except Exception as e:
+        log.exception("Scribe nije uspeo")
+        scribe_raw = f"<greška: {e}>"
+    rec = {"ts": ts, "secs": round(len(samples) / SAMPLE_RATE, 1), "wav": wav_path.name,
+           "whisper": whisper_raw, "scribe": scribe_raw}
+    with AB_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    log.info("A/B zabeležen: %s", ts)
+
+
 # --- rečnik ---------------------------------------------------------------------
 
 def load_recnik() -> list[tuple[re.Pattern, str]]:
@@ -427,6 +474,7 @@ class Reci:
     def __init__(self, ui: Indicator):
         self.ui = ui
         self.groq_key = load_groq_key()
+        self.scribe_key = env_value("ELEVENLABS_API_KEY") if env_value("RECI_AB") == "1" else None
         self.held = False           # desni Ctrl trenutno držan (auto-repeat se ignoriše)
         self.recording = False
         self.frames: list[np.ndarray] = []
@@ -535,6 +583,8 @@ class Reci:
             self.ui.show("Ništa nije prepoznato", "error", "pokušajte ponovo", 2000)
             winsound.Beep(300, 150)
             return
+        if self.scribe_key and self.groq_key:
+            threading.Thread(target=ab_record, args=(samples, text, self.scribe_key), daemon=True).start()
         raw = text
         text = apply_recnik(text)
         if self.groq_key:
@@ -568,6 +618,8 @@ def main():
     r = Reci(ui)
     threading.Thread(target=r.watch_key, daemon=True).start()
     engine = "Groq Whisper large-v3 + lektor" if r.groq_key else "Google (besplatno)"
+    if r.scribe_key:
+        engine += " | A/B: Scribe paralelno"
     log.info("Reci spreman — drži %s | prepoznavanje: %s", HOLD_KEY.upper(), engine)
     ui.show("Reci je spreman", "info", "držite desni Ctrl dok pričate", 2500)
     ui.root.mainloop()
