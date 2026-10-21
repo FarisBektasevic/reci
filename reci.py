@@ -254,23 +254,28 @@ def apply_recnik(text: str) -> str:
 # --- UI ------------------------------------------------------------------------
 
 class Indicator:
-    """Mala traka na dnu ekrana (kao Win+H). Ne uzima fokus — paste ide u prozor gde je kursor.
+    """Pilula na dnu ekrana, u stilu Win+H: ikonica mikrofona, tekst, trakice jačine glasa.
 
-    Thread-safe: show()/hide() mogu da se zovu iz bilo kog threada, tk radi samo u glavnom.
+    Stanja: info (zelena), listening (crvena tačka pulsira + trakice), processing (tri tačke), error (crveno).
+    Ne uzima fokus (WS_EX_NOACTIVATE) — paste ide u prozor gde je kursor.
+    Thread-safe: show()/hide()/set_level() mogu iz bilo kog threada, tk crta samo u glavnom.
     """
-    BG = "#202020"
+    W, H, R = 340, 64, 32                 # pilula: širina, visina, radijus
+    BG, BORDER, TRANSPARENT = "#1c1c1e", "#3a3a3c", "#010203"
+    TXT, SUB = "#f2f2f2", "#9a9a9e"
+    COL = {"info": "#34c759", "listening": "#ff453a", "processing": "#5ac8fa", "error": "#ff453a"}
     OFFSCREEN = "+-3000+-3000"
 
     def __init__(self):
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        self.root.attributes("-alpha", 0.93)
-        self.root.configure(bg=self.BG)
+        self.root.attributes("-transparentcolor", self.TRANSPARENT)   # zaobljeni uglovi
+        self.root.configure(bg=self.TRANSPARENT)
         self.root.geometry(self.OFFSCREEN)
-        self.label = tk.Label(self.root, text="", fg="white", bg=self.BG,
-                              font=("Segoe UI", 12), padx=20, pady=9)
-        self.label.pack()
+        self.c = tk.Canvas(self.root, width=self.W, height=self.H, bg=self.TRANSPARENT,
+                           highlightthickness=0, bd=0)
+        self.c.pack()
         self.root.update_idletasks()
         user32 = ctypes.windll.user32
         hwnd = user32.GetParent(self.root.winfo_id())
@@ -279,13 +284,76 @@ class Indicator:
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)
         self.q: queue.Queue = queue.Queue()
         self.hide_job = None
+        self.state, self.text, self.sub = "info", "", ""
+        self.level = 0.0            # 0..1 jačina glasa (iz mikrofona)
+        self.levels = [0.0] * 5     # istorija za trakice
+        self.tick = 0
+        self.visible = False
         self.root.after(40, self._poll)
 
-    def show(self, text: str, color: str = "white", hide_after_ms: int | None = None):
-        self.q.put(("show", text, color, hide_after_ms))
+    # --- API (bilo koji thread) ---
+    def show(self, text: str, state: str = "info", sub: str = "", hide_after_ms: int | None = None):
+        self.q.put(("show", text, state, sub, hide_after_ms))
 
     def hide(self):
         self.q.put(("hide",))
+
+    def set_level(self, level: float):
+        self.level = max(0.0, min(1.0, level))
+
+    # --- crtanje (glavni thread) ---
+    def _pill(self):
+        c, W, H, R = self.c, self.W, self.H, self.R
+        for fill, outline, d in ((self.BORDER, "", 0), (self.BG, "", 1)):
+            c.create_oval(d, d, 2 * R - d, H - d, fill=fill, outline=outline)
+            c.create_oval(W - 2 * R + d, d, W - d, H - d, fill=fill, outline=outline)
+            c.create_rectangle(R, d, W - R, H - d, fill=fill, outline=outline)
+
+    def _mic(self, x, y, color):
+        """Ikonica mikrofona: kapsula + luk + stalak."""
+        c = self.c
+        c.create_oval(x - 5, y - 11, x + 5, y + 3, fill=color, outline=color)
+        c.create_arc(x - 9, y - 6, x + 9, y + 8, start=180, extent=180, style="arc", outline=color, width=2)
+        c.create_line(x, y + 8, x, y + 12, fill=color, width=2)
+        c.create_line(x - 5, y + 12, x + 5, y + 12, fill=color, width=2)
+
+    def _draw(self):
+        c = self.c
+        c.delete("all")
+        self._pill()
+        col = self.COL[self.state]
+        ix, iy = 32, self.H // 2
+        if self.state == "listening":
+            # pulsirajući prsten oko mikrofona
+            r = 15 + 3 * abs(((self.tick % 20) / 10) - 1)
+            c.create_oval(ix - r, iy - r, ix + r, iy + r, outline=col, width=1)
+        c.create_oval(ix - 13, iy - 13, ix + 13, iy + 13, fill="#2c2c2e", outline="")
+        self._mic(ix, iy, col)
+        tx = 58
+        if self.sub:
+            c.create_text(tx, iy - 8, text=self.text, fill=self.TXT, anchor="w", font=("Segoe UI Semibold", 11))
+            c.create_text(tx, iy + 10, text=self.sub, fill=self.SUB, anchor="w", font=("Segoe UI", 9))
+        else:
+            c.create_text(tx, iy, text=self.text, fill=self.TXT, anchor="w", font=("Segoe UI Semibold", 11))
+        # desna strana: trakice jačine (listening) ili tri tačke (processing)
+        rx = self.W - 36
+        if self.state == "listening":
+            self.levels = self.levels[1:] + [self.level]
+            for i, lv in enumerate(self.levels):
+                h = 4 + lv * 18
+                x = rx - 24 + i * 7
+                c.create_rectangle(x, iy - h / 2, x + 4, iy + h / 2, fill=col, outline="")
+        elif self.state == "processing":
+            for i in range(3):
+                on = (self.tick // 4) % 3 == i
+                x = rx - 16 + i * 10
+                c.create_oval(x - 3, iy - 3, x + 3, iy + 3, fill=col if on else "#48484a", outline="")
+
+    def _place(self):
+        x = (self.root.winfo_screenwidth() - self.W) // 2
+        y = self.root.winfo_screenheight() - self.H - 80
+        self.root.geometry(f"{self.W}x{self.H}+{x}+{y}")
+        self.root.lift()
 
     def _poll(self):
         while not self.q.empty():
@@ -294,19 +362,21 @@ class Indicator:
                 self.root.after_cancel(self.hide_job)
                 self.hide_job = None
             if msg[0] == "hide":
+                self.visible = False
                 self.root.geometry(self.OFFSCREEN)
                 continue
-            _, text, color, hide_after_ms = msg
-            self.label.config(text=text, fg=color)
-            self.root.update_idletasks()
-            w, h = self.root.winfo_reqwidth(), self.root.winfo_reqheight()
-            x = (self.root.winfo_screenwidth() - w) // 2
-            y = self.root.winfo_screenheight() - h - 90
-            self.root.geometry(f"{w}x{h}+{x}+{y}")
-            self.root.lift()
+            _, self.text, self.state, self.sub, hide_after_ms = msg
+            self.tick = 0
+            self.levels = [0.0] * 5
+            self.visible = True
+            self._draw()
+            self._place()
             if hide_after_ms:
-                self.hide_job = self.root.after(hide_after_ms, lambda: self.root.geometry(self.OFFSCREEN))
-        self.root.after(40, self._poll)
+                self.hide_job = self.root.after(hide_after_ms, self.hide)
+        if self.visible and self.state in ("listening", "processing"):
+            self.tick += 1
+            self._draw()
+        self.root.after(50, self._poll)
 
 
 # --- glavna logika ---------------------------------------------------------------
@@ -339,6 +409,8 @@ class Reci:
     # --- snimanje ---------------------------------------------------------
     def _callback(self, indata, frames, time_info, status):
         self.frames.append(indata.copy())
+        rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2))) / 32768
+        self.ui.set_level(min(1.0, rms * 12))      # tih govor ~0.02, normalan ~0.05–0.1
         if time.time() - self.started > MAX_SECONDS and not self.auto_stop_sent:
             self.auto_stop_sent = True
             threading.Thread(target=self.stop, daemon=True).start()
@@ -357,10 +429,10 @@ class Reci:
                 self.stream.start()
             except Exception as e:
                 log.exception("Mikrofon nije dostupan")
-                self.ui.show(f"✗ Mikrofon nije dostupan: {e}", "#ff8080", 3000)
+                self.ui.show("Mikrofon nije dostupan", "error", str(e)[:40], 3000)
                 return
             self.recording = True
-        self.ui.show("●  Slušam…   pustite desni Ctrl za kraj", "#ff6b6b")
+        self.ui.show("Slušam", "listening", "pustite desni Ctrl za kraj")
         threading.Thread(target=winsound.Beep, args=(900, 70), daemon=True).start()
 
     def _close_stream(self) -> bool:
@@ -393,7 +465,7 @@ class Reci:
     def _process(self, samples: np.ndarray):
         secs = len(samples) / SAMPLE_RATE
         engine = "Groq Whisper" if self.groq_key else "Google"
-        self.ui.show("…  Prepoznajem", "#9ecbff")
+        self.ui.show("Prepoznajem", "processing", f"{secs:.0f} s govora")
         log.info("Prepoznajem %.1fs preko %s", secs, engine)
         try:
             if self.groq_key:
@@ -401,19 +473,19 @@ class Reci:
                     text = transcribe_groq(samples, self.groq_key)
                 except Exception:  # limit, loš ključ, Groq pao → Google za ovu poruku
                     log.exception("Groq nije uspeo, prelazim na Google")
-                    self.ui.show("…  Prepoznajem (Google)", "#9ecbff")
+                    self.ui.show("Prepoznajem", "processing", "rezerva: Google")
                     text = transcribe_google(samples)
             else:
                 text = transcribe_google(samples)
         except Exception as e:  # ni mreže nema
             log.exception("Greška pri prepoznavanju")
-            self.ui.show(f"✗ Greška: {e}"[:90], "#ff8080", 3500)
+            self.ui.show("Greška", "error", str(e)[:44], 3500)
             winsound.Beep(300, 150)
             return
         text = to_latin(text).strip()
         if not text:
             log.info("Ništa nije prepoznato")
-            self.ui.show("✗ Ništa nije prepoznato", "#ff8080", 2000)
+            self.ui.show("Ništa nije prepoznato", "error", "pokušajte ponovo", 2000)
             winsound.Beep(300, 150)
             return
         raw = text
@@ -450,7 +522,7 @@ def main():
     keyboard.hook(r.on_key)
     engine = "Groq Whisper large-v3 + lektor" if r.groq_key else "Google (besplatno)"
     log.info("Reci spreman — drži %s | prepoznavanje: %s", HOLD_KEY.upper(), engine)
-    ui.show("Reci — držite desni Ctrl dok pričate", "#a0e0a0", 2500)
+    ui.show("Reci je spreman", "info", "držite desni Ctrl dok pričate", 2500)
     ui.root.mainloop()
 
 

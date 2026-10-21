@@ -6,9 +6,19 @@ Windowsovo glasovno kucanje (Win+H) nema srpski. Reci ga ima — i to kao prvi j
 
 > *Serbian dictation for Windows. Hold right Ctrl, speak, release — text is pasted at the cursor. Free; uses Groq Whisper (or Google as fallback) with a grammar pass tuned for Serbian (Latin script, ekavian). Serbian-first — docs below are in Serbian.*
 
----
+## Instalacija iz terminala
 
-## Instalacija (2 minuta)
+PowerShell (Win+X → *Terminal*), jedna linija — bez git-a, bez Python-a:
+
+```powershell
+irm https://raw.githubusercontent.com/FarisBektasevic/reci/main/install.ps1 | iex
+```
+
+Skine poslednji `Reci.exe` u `%LOCALAPPDATA%\Programs\Reci`, napravi prečicu u Start meniju i pokrene ga. Ista komanda radi i za ažuriranje. Skripta je [install.ps1](install.ps1) — pročitaj je pre pokretanja ako ti je tako lakše.
+
+Deinstalacija: obriši `%LOCALAPPDATA%\Programs\Reci`, `%LOCALAPPDATA%\reci` (ključ, log) i `shell:startup\Reci.lnk`.
+
+## Instalacija ručno
 
 1. Skini **`Reci.exe`** sa [Releases](../../releases/latest) stranice.
 2. Prebaci ga gde hoćeš (npr. `C:\Programi\Reci\`) i pokreni dvoklikom.
@@ -76,7 +86,7 @@ desni Ctrl ↓  ──►  mikrofon (16 kHz, mono)  ──►  desni Ctrl ↑
 | Google rezerva | `SpeechRecognition` → Google Web Speech `sr-RS`. Dugi snimci se seku na najtišem mestu (35–50 s). | `transcribe_google`, `split_on_silence` |
 | Rečnik | `recnik.txt`, cele reči, bez razlike velikih/malih. | `apply_recnik` |
 | Lektor | Groq chat `qwen/qwen3.8-27b`, `temperature=0`. Strog: samo padeži imenica/prideva, spojene/rastavljene reči, interpunkcija. **Ne sme** da menja lice/broj/vreme glagola, smisao, žargon, „je li”. Ako promeni dužinu van 0,6–1,5× → ignoriše se. Greška → original. | `lektor_groq`, `LEKTOR_PROMPT` |
-| Traka | `tkinter` bez okvira, `WS_EX_NOACTIVATE` da ne krade fokus (inače bi Ctrl+V otišao u traku). | `Indicator` |
+| Pilula | `tkinter` Canvas, zaobljena kroz `-transparentcolor`, `WS_EX_NOACTIVATE` da ne krade fokus (inače bi Ctrl+V otišao u nju). Stanja: spreman / sluša (pulsira + trakice jačine glasa iz RMS-a) / prepoznaje (tri tačke) / greška. | `Indicator` |
 | Prvo pokretanje | Nema ključa ni `.env`-a → dijalog za ključ + pitanje za autostart → upis u `%LOCALAPPDATA%\reci`. | `first_run_setup`, `set_autostart` |
 | Jedna instanca | Mutex `Local\Reci` — drugi start se odmah ugasi. | `already_running` |
 
@@ -131,7 +141,7 @@ Normalna upotreba (20–50 poruka na sat) ne dolazi ni blizu. Ako Whisper udari 
 
 ## Istorija
 
-- **21.10.2026** — v1: Ctrl+Alt+Space, crni prozor, Google. → v2: voki-toki desni Ctrl, pozadina, traka, autostart, mutex. → Groq Whisper + Google rezerva. → Ton pri otvaranju mikrofona. → Lektor (qwen3.8-27b; llama-3.3 više nije na Groq-u, gpt-oss-120b odbačen: ijekavica, sporiji). → Rečnik, pojmovi. → `Reci.exe`, prvo pokretanje sa dijalogom, javni repo.
+- **21.10.2026** — v1: Ctrl+Alt+Space, crni prozor, Google. → v2: voki-toki desni Ctrl, pozadina, traka, autostart, mutex. → Groq Whisper + Google rezerva. → Ton pri otvaranju mikrofona. → Lektor (qwen3.8-27b; llama-3.3 više nije na Groq-u, gpt-oss-120b odbačen: ijekavica, sporiji). → Rečnik, pojmovi. → `Reci.exe`, prvo pokretanje sa dijalogom, javni repo. → Pilula u stilu Win+H (mikrofon, jačina glasa, animacije), `install.ps1` za instalaciju iz terminala.
 
 ## Ideje
 
