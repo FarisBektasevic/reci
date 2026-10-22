@@ -1,4 +1,4 @@
-# Reci — instalacija iz terminala (bez git-a, bez Python-a).
+﻿# Reci — instalacija iz terminala (bez git-a, bez Python-a).
 #   irm https://raw.githubusercontent.com/FarisBektasevic/reci/main/install.ps1 | iex
 # Skine poslednji Reci.zip sa GitHub Releases, proveri SHA-256, raspakuje u %LOCALAPPDATA%\Programs\Reci,
 # napravi prečicu u Start meniju i pokrene. Prvo pokretanje pita za Groq ključ i autostart.
