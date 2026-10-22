@@ -22,7 +22,9 @@ Write-Host "Skidam $($rel.tag_name) ($([math]::Round($zip.size/1MB)) MB)..."
 Invoke-WebRequest $zip.browser_download_url -OutFile $tmp -UseBasicParsing
 
 if ($sha) {
-    $expected = ((Invoke-WebRequest $sha.browser_download_url -UseBasicParsing).Content -split '\s+')[0].ToLower()
+    $raw = (Invoke-WebRequest $sha.browser_download_url -UseBasicParsing).Content
+    if ($raw -is [byte[]]) { $raw = [Text.Encoding]::ASCII.GetString($raw) }   # GitHub ga šalje kao octet-stream
+    $expected = ($raw.Trim() -split '\s+')[0].ToLower()
     $actual = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower()
     if ($expected -ne $actual) { Remove-Item $tmp; throw "SHA-256 se ne poklapa — fajl je oštećen ili izmenjen. Prekidam." }
     Write-Host "SHA-256 u redu."
