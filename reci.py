@@ -37,6 +37,9 @@ POLL_S = 0.025             # koliko često se pita Windows „je li desni Ctrl p
 SAMPLE_RATE = 16000
 MIN_SECONDS = 0.6          # kraće = slučajan pritisak, tiho se odbacuje
 MAX_SECONDS = 180          # automatski stop posle 3 minuta
+TAIL_S = 0.3               # snima još malo posle puštanja — da se ne odseče poslednji slog
+WARMUP_PEAK = 30           # do ovoga = mikrofon se još zagreva (drajver šalje ±1)
+SILENCE_RMS = 300         # najglasnijih 100 ms ispod ovoga = tišina (šum ~100, govor 2000+) → ne šalje se
 GOOGLE_CHUNK_MAX_S = 50    # Google prima kratke snimke — duže se seče na tišini
 GOOGLE_CHUNK_MIN_S = 35
 
@@ -345,14 +348,16 @@ def apply_recnik(text: str) -> str:
 class Indicator:
     """Pilula na dnu ekrana, u stilu Win+H: ikonica mikrofona, tekst, trakice jačine glasa.
 
-    Stanja: info (zelena), listening (crvena tačka pulsira + trakice), processing (tri tačke), error (crveno).
+    Stanja: info (zelena), warming (narandžasta, mikrofon se pali), listening (crvena tačka pulsira + trakice),
+    processing (tri tačke), error (crveno).
     Ne uzima fokus (WS_EX_NOACTIVATE) — paste ide u prozor gde je kursor.
     Thread-safe: show()/hide()/set_level() mogu iz bilo kog threada, tk crta samo u glavnom.
     """
     W, H, R = 340, 64, 32                 # pilula: širina, visina, radijus
     BG, BORDER, TRANSPARENT = "#1c1c1e", "#3a3a3c", "#010203"
     TXT, SUB = "#f2f2f2", "#9a9a9e"
-    COL = {"info": "#34c759", "listening": "#ff453a", "processing": "#5ac8fa", "error": "#ff453a"}
+    COL = {"info": "#34c759", "warming": "#ff9f0a", "listening": "#ff453a", "processing": "#5ac8fa",
+           "error": "#ff453a"}
     OFFSCREEN = "+-3000+-3000"
 
     def __init__(self):
@@ -432,7 +437,7 @@ class Indicator:
                 h = 4 + lv * 18
                 x = rx - 24 + i * 7
                 c.create_rectangle(x, iy - h / 2, x + 4, iy + h / 2, fill=col, outline="")
-        elif self.state == "processing":
+        elif self.state in ("processing", "warming"):
             for i in range(3):
                 on = (self.tick // 4) % 3 == i
                 x = rx - 16 + i * 10
@@ -462,7 +467,7 @@ class Indicator:
             self._place()
             if hide_after_ms:
                 self.hide_job = self.root.after(hide_after_ms, self.hide)
-        if self.visible and self.state in ("listening", "processing"):
+        if self.visible and self.state in ("listening", "processing", "warming"):
             self.tick += 1
             self._draw()
         self.root.after(50, self._poll)
@@ -477,6 +482,7 @@ class Reci:
         self.scribe_key = env_value("ELEVENLABS_API_KEY") if env_value("RECI_AB") == "1" else None
         self.held = False           # desni Ctrl trenutno držan (auto-repeat se ignoriše)
         self.recording = False
+        self.live = False           # mikrofon je počeo da šalje pravi zvuk (ne samo nule zagrevanja)
         self.frames: list[np.ndarray] = []
         self.stream = None
         self.started = 0.0
@@ -503,6 +509,15 @@ class Reci:
 
     # --- snimanje ---------------------------------------------------------
     def _callback(self, indata, frames, time_info, status):
+        # Realtek drajver posle otvaranja daje ~0,5 s skoro-nula (±1; uz ~0,35 s za samo otvaranje),
+        # a živ mikrofon i u tihoj sobi ima vrhove 80+. „Slušam" i ton tek kad stigne pravi zvuk —
+        # inače se prva reč izgubi i Whisper halucinira.
+        if not self.live:
+            if np.abs(indata).max() <= WARMUP_PEAK:
+                return
+            self.live = True
+            self.ui.show("Slušam", "listening", "pustite desni Ctrl za kraj")
+            threading.Thread(target=winsound.Beep, args=(900, 70), daemon=True).start()
         self.frames.append(indata.copy())
         rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2))) / 32768
         self.ui.set_level(min(1.0, rms * 12))      # tih govor ~0.02, normalan ~0.05–0.1
@@ -511,13 +526,15 @@ class Reci:
             threading.Thread(target=self.stop, daemon=True).start()
 
     def start(self):
-        """Mikrofon se otvara tek na pritisak; kratak ton javlja da je spreman — pričajte posle tona."""
+        """Mikrofon se otvara tek na pritisak; „Slušam" + ton kad stvarno čuje — pričajte posle toga."""
         with self.lock:
             if self.recording:
                 return
             self.frames = []
+            self.live = False
             self.started = time.time()
             self.auto_stop_sent = False
+            self.ui.show("Sačekajte…", "warming", "mikrofon se uključuje")
             try:
                 self.stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                                              callback=self._callback)
@@ -527,8 +544,6 @@ class Reci:
                 self.ui.show("Mikrofon nije dostupan", "error", str(e)[:40], 3000)
                 return
             self.recording = True
-        self.ui.show("Slušam", "listening", "pustite desni Ctrl za kraj")
-        threading.Thread(target=winsound.Beep, args=(900, 70), daemon=True).start()
 
     def _close_stream(self) -> bool:
         with self.lock:
@@ -546,12 +561,26 @@ class Reci:
             self.ui.hide()
 
     def stop(self):
+        if not self.recording:
+            return
+        if self.live:
+            time.sleep(TAIL_S)
         if not self._close_stream():
             return
         frames, self.frames = self.frames, []
         samples = np.concatenate(frames).flatten() if frames else np.zeros(0, np.int16)
+        if not self.live:
+            self.ui.show("Prerano pušteno", "error", "pričajte tek kad piše „Slušam”", 2000)
+            return
         if len(samples) / SAMPLE_RATE < MIN_SECONDS:
             self.ui.hide()          # slučajan kratak pritisak — tiho
+            return
+        win = SAMPLE_RATE // 10
+        peak = max(float(np.sqrt(np.mean(samples[i:i + win].astype(np.float32) ** 2)))
+                   for i in range(0, len(samples) - win + 1, win))
+        if peak < SILENCE_RMS:      # Whisper na tišini izmišlja („Hvala na sviđanju!")
+            log.info("Tišina %.1fs (jačina %.0f) — ne šaljem", len(samples) / SAMPLE_RATE, peak)
+            self.ui.show("Ništa se ne čuje", "error", "mikrofon je primio tišinu", 2000)
             return
         winsound.Beep(600, 80)
         threading.Thread(target=self._process, args=(samples,), daemon=True).start()

@@ -36,7 +36,7 @@ Windows može da pita „Da li ste sigurni da želite da pokrenete ovaj program?
 ## Kako se koristi
 
 1. Klikni gde treba tekst.
-2. **Drži desni Ctrl** → kratak ton → traka „● Slušam…” na dnu ekrana.
+2. **Drži desni Ctrl** → narandžasto „Sačekajte…” (mikrofon se pali, ~0,8 s) → ton + crveno „● Slušam” na dnu ekrana.
 3. Pričaj. *(Posle tona — mikrofon se otvara tek na pritisak, ne ranije.)*
 4. **Pusti desni Ctrl** → drugi ton → „Prepoznajem” → tekst se nalepi za 1–2 s.
 
@@ -134,7 +134,7 @@ Normalna upotreba (20–50 poruka na sat) ne dolazi ni blizu. Ako Whisper udari 
 | Ništa na desni Ctrl | Reci ne radi — pokreni ga. Pogledaj `reci.log`. |
 | Traka se pojavi, tekst se ne nalepi | Taj prozor ne prima Ctrl+V — tekst je u clipboardu, nalepi ručno. |
 | „Prepoznajem (Google)” umesto Groq | Limit, pad ili loš ključ — `reci.log`, red „Groq nije uspeo”. |
-| Fale prve reči | Pričaj posle tona; mikrofonu treba ~100 ms. |
+| Fale prve reči | Pričaj tek kad piše „Slušam”. Izmereno: otvaranje ~0,35 s + Realtek drajver još 0,5 s šalje ±1 (zagrevanje) — „Slušam” se zato pali tek na prvi pravi zvuk. Tihi snimci se ne šalju (Whisper na tišini izmišlja „Hvala na sviđanju!”), a snima se još 0,3 s posle puštanja. |
 | Ne čuje se ton | `winsound.Beep` na nekim laptopovima ne izlazi na zvučnike. Pokušaj sa `PlaySound` + WAV je **pokvario prepoznavanje** (nejasno zašto) — vraćeno. Otvoreno. |
 | Lektor promenio smisao | Otvori issue sa redom iz loga („Ispravka: … → …”). |
 | Antivirus se buni na `Reci.exe` | Nepotpisan PyInstaller program ponekad okine false positive. Od v1.1 je folder (ne onefile), bez UPX-a, sa metapodacima — ređe se dešava. Ako se desi: prijavi kao false positive ([Microsoft](https://www.microsoft.com/wdsi/filesubmission) za Defender) ili pokreni iz koda. |
